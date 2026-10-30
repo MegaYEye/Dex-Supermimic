@@ -105,6 +105,9 @@ class Actor(nn.Module):
                     state_dict[prefix + "norm." + new] = value.reshape(())
                 else:
                     state_dict[prefix + "norm." + new] = value.reshape(1, -1)
+        std_key = prefix + "norm._std"
+        if std_key not in state_dict and prefix + "norm._var" in state_dict:
+            state_dict[std_key] = state_dict[prefix + "norm._var"].sqrt()
         return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
 
