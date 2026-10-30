@@ -72,8 +72,22 @@ class PlayConfig:
     export_onnx: str | None = None
 
 
+def _checkpoint_format(path: str) -> int | None:
+    try:
+        return torch.load(path, map_location="cpu", weights_only=False).get("format_version")
+    except Exception:
+        return None
+
+
 def play():
     cfg = tyro.cli(PlayConfig)
+    if cfg.viewer:
+        # Format 4 is the PPO (rsl-rl) actor; everything else is a world-model
+        # pack. The native viewer only exists on the PPO path, so route each
+        # checkpoint to the viewer it supports.
+        if _checkpoint_format(cfg.checkpoint) != 4:
+            print("[play] world-model checkpoint: switching to the Viser viewer", flush=True)
+            cfg.viser, cfg.viewer = True, False
     if cfg.viewer and cfg.viser:
         raise ValueError("Use --no-viser --viewer for the native viewer, or --viser for the web viewer.")
     if cfg.steps < 0 or (cfg.steps == 0 and not cfg.viser):
