@@ -109,10 +109,13 @@ def play():
         raise ValueError("Unsupported checkpoint format")
     is_pen = task == "hand2-pen-spin"
     state = checkpoint["modules"]["actor"]
+    # Buffers carry the current ``_mean`` spelling; released packfiles the
+    # original ``mean``. The final layer's rows are the action dimension.
+    norm_key = "norm._mean" if "norm._mean" in state else "norm.mean"
     if is_ppo:
-        actor = GaussianPPOActor(state["norm._mean"].shape[-1], state["net.6.bias"].numel() // 2)
+        actor = GaussianPPOActor(state[norm_key].shape[-1], state["net.6.bias"].numel() // 2)
     else:
-        actor = Actor(state["norm.mean"].numel())
+        actor = Actor(state[norm_key].numel())
     actor = actor.to(cfg.device)
     actor.load_state_dict(state)
     actor.eval()
