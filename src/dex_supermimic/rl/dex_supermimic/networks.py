@@ -94,6 +94,22 @@ class Actor(nn.Module):
     def forward(self, obs):
         return torch.tanh(self.net(self.norm(obs)))
 
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        # Released checkpoints were trained with the original EmpiricalNorm
+        # buffers (``mean``/``var``/``count``, 1-D, no ``_std``).
+        for old, new in (("mean", "_mean"), ("var", "_var"), ("count", "count")):
+            key = prefix + "norm." + old
+            if key in state_dict:
+                value = state_dict.pop(key)
+                if old == "count":
+                    state_dict[prefix + "norm." + new] = value.reshape(())
+                else:
+                    state_dict[prefix + "norm." + new] = value.reshape(1, -1)
+        std_key = prefix + "norm._std"
+        if std_key not in state_dict and prefix + "norm._var" in state_dict:
+            state_dict[std_key] = state_dict[prefix + "norm._var"].sqrt()
+        return super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
+
 
 class GaussianPPOActor(nn.Module):
     """Wuji-MJLab-style state-dependent diagonal Gaussian used by the PPO baseline.

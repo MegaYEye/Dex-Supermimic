@@ -945,12 +945,15 @@ class DexSuperMimicRunner:
             obs, reward, terminated, truncated, _ = self.env.step(action)
             # rsl-rl treats timeouts as done but adds a bootstrapping reward
             # correction before GAE. This reproduces upstream Wuji-MJLab exactly.
-            reward = reward + gamma * value * truncated.float()
+            reward = reward + gamma * value.detach() * truncated.float()
             memory["obs"][t] = self.obs
             memory["critic_obs"][t] = critic_obs
             memory["actions"][t] = action
-            memory["log_prob"][t] = distribution.log_prob(action).sum(-1)
-            memory["value"][t] = value
+            # Store plain tensors: the rollout runs for hundreds of steps, and
+            # graphs kept in the preallocated buffers are freed by the PPO
+            # update's backward (or overflow memory long before it).
+            memory["log_prob"][t] = distribution.log_prob(action).sum(-1).detach()
+            memory["value"][t] = value.detach()
             memory["reward"][t] = reward
             memory["terminated"][t] = terminated
             memory["truncated"][t] = truncated

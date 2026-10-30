@@ -72,8 +72,22 @@ class PlayConfig:
     export_onnx: str | None = None
 
 
+def _checkpoint_format(path: str) -> int | None:
+    try:
+        return torch.load(path, map_location="cpu", weights_only=False).get("format_version")
+    except Exception:
+        return None
+
+
 def play():
     cfg = tyro.cli(PlayConfig)
+    if cfg.viewer:
+        # Format 4 is the PPO (rsl-rl) actor; everything else is a world-model
+        # pack. The native viewer only exists on the PPO path, so route each
+        # checkpoint to the viewer it supports.
+        if _checkpoint_format(cfg.checkpoint) != 4:
+            print("[play] world-model checkpoint: switching to the Viser viewer", flush=True)
+            cfg.viser, cfg.viewer = True, False
     if cfg.viewer and cfg.viser:
         raise ValueError("Use --no-viser --viewer for the native viewer, or --viser for the web viewer.")
     if cfg.steps < 0 or (cfg.steps == 0 and not cfg.viser):
@@ -95,10 +109,13 @@ def play():
         raise ValueError("Unsupported checkpoint format")
     is_pen = task == "hand2-pen-spin"
     state = checkpoint["modules"]["actor"]
+    # Buffers carry the current ``_mean`` spelling; released packfiles the
+    # original ``mean``. The final layer's rows are the action dimension.
+    norm_key = "norm._mean" if "norm._mean" in state else "norm.mean"
     if is_ppo:
-        actor = GaussianPPOActor(state["norm._mean"].shape[-1], state["net.6.bias"].numel() // 2)
+        actor = GaussianPPOActor(state[norm_key].shape[-1], state["net.6.bias"].numel() // 2)
     else:
-        actor = Actor(state["norm.mean"].numel())
+        actor = Actor(state[norm_key].numel())
     actor = actor.to(cfg.device)
     actor.load_state_dict(state)
     actor.eval()
